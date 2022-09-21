@@ -49,14 +49,25 @@ impl<T> Drop for Sender<T> {
 
 pub struct Receiver<T> {
     shared: Arc<Shared<T>>,
+    buffer: VecDeque<T>,
 }
 
 impl<T> Receiver<T> {
     pub fn recv(&mut self) -> Option<T> {
+        if let Some(value) = self.buffer.pop_front() {
+            return Some(value);
+        }
+
         let mut inner = self.shared.inner.lock().unwrap();
         loop {
             match inner.queue.pop_front() {
-                Some(value) => return Some(value),
+                Some(value) => {
+                    if !inner.queue.is_empty() {
+                        std::mem::swap(&mut inner.queue, &mut self.buffer);
+                    }
+
+                    return Some(value);
+                },
                 None if dbg!(inner.num_sender) == 0 => return None,
                 None => {
                     inner = self.shared.is_available.wait(inner).unwrap();
@@ -82,6 +93,7 @@ pub fn channel<T>() -> (Sender<T>, Receiver<T>) {
         },
         Receiver {
             shared: Arc::clone(&shared),
+            buffer: VecDeque::new(),
         },
     )
 }
@@ -90,13 +102,18 @@ pub fn channel<T>() -> (Sender<T>, Receiver<T>) {
 mod tests {
     use super::*;
 
-    // #[test]
+    #[test]
     fn it_works() {
         let (mut sender, mut receiver) = channel::<i32>();
 
-        sender.send(5i32);
-        let data = receiver.recv();
-        assert_eq!(data, Some(5i32));
+        for i in 0..10 {
+            sender.send(5i32);
+        }
+
+        for i in 0..10 {
+            let data = receiver.recv();
+            assert_eq!(data, Some(5i32));
+        }
     }
 
     #[test]
