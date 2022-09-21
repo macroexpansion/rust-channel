@@ -16,7 +16,7 @@ pub struct Sender<T> {
 }
 
 impl<T> Sender<T> {
-    pub fn send(&mut self, message: T) {
+    pub fn send(&self, message: T) {
         let mut inner = self.shared.inner.lock().unwrap(); // get the lock
         inner.queue.push_back(message);
         drop(inner); // drop the lock
@@ -67,7 +67,7 @@ impl<T> Receiver<T> {
                     }
 
                     return Some(value);
-                },
+                }
                 None if dbg!(inner.num_sender) == 0 => return None,
                 None => {
                     inner = self.shared.is_available.wait(inner).unwrap();
@@ -104,21 +104,25 @@ mod tests {
 
     #[test]
     fn it_works() {
-        let (mut sender, mut receiver) = channel::<i32>();
+        let (sender, mut receiver) = channel::<i32>();
+        let sender = Arc::new(sender);
 
         for i in 0..10 {
-            sender.send(5i32);
+            let sender = Arc::clone(&sender);
+            std::thread::spawn(move || {
+                sender.send(i);
+            });
         }
 
         for i in 0..10 {
             let data = receiver.recv();
-            assert_eq!(data, Some(5i32));
+            assert_eq!(data, Some(i));
         }
     }
 
     #[test]
     fn zero_sender() {
-        let (mut sender, mut receiver) = channel::<i32>();
+        let (sender, mut receiver) = channel::<i32>();
 
         drop(sender);
 
