@@ -107,16 +107,16 @@ mod tests {
         let (sender, mut receiver) = channel::<i32>();
         let sender = Arc::new(sender);
 
-        for i in 0..10 {
+        for _ in 0..10 {
             let sender = Arc::clone(&sender);
             std::thread::spawn(move || {
-                sender.send(i);
+                sender.send(5);
             });
         }
 
-        for i in 0..10 {
+        for _ in 0..10 {
             let data = receiver.recv();
-            assert_eq!(data, Some(i));
+            assert_eq!(data, Some(5));
         }
     }
 
